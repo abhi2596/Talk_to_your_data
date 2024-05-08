@@ -6,13 +6,10 @@ import pandas as pd
 import streamlit as st
 import unify 
 
-model_name = "gpt-3.5-turbo"
-provider_name = "openai"
-
 def reset():
     st.session_state.messages = []
 
-st.title("Chat with Data")
+st.title("Talk to your Data")
 
 
 @st.cache_data(experimental_allow_widgets=True)
@@ -37,7 +34,7 @@ def load_llm(api_key,model_name,provider_name):
     llm = ChatUnify(unify_api_key=api_key,model=f"{model_name}@{provider_name}")
     return llm
 
-# @st.experimental_fragment()
+@st.experimental_fragment()
 def clear_fragment():
     st.button("Clear Chat History",on_click=reset)
 
@@ -82,13 +79,19 @@ if len(st.session_state.messages) == 0:
 # Accept user input
 if prompt := st.chat_input():
     # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        response = agent.invoke(prompt)
-        response = st.write(response)
-        # response = st.write(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    if api_key is None:
+        if uploaded_file is None:
+            st.warning("Enter API Key and a Upload CSV file to start")
+        else:
+            st.warning("Enter a Unify API key to start")
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            response = agent.invoke(prompt)
+            response = st.write(response)
+            # response = st.write(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
