@@ -1,10 +1,8 @@
 from langchain_unify import ChatUnify
-from langchain.agents.agent_types import AgentType
-from langchain_experimental.agents.agent_toolkits import create_csv_agent
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-import pandas as pd 
 import streamlit as st
 import unify 
+import re 
+from langchain_experimental.utilities import PythonREPL 
 
 def reset():
     st.session_state.messages = []
@@ -29,12 +27,11 @@ def mp_fragment():
     provider_name = provider(model_name)
     return api_key,model_name,provider_name
 
-@st.cache_resource(experimental_allow_widgets=True)
+
 def load_llm(api_key,model_name,provider_name):
     llm = ChatUnify(unify_api_key=api_key,model=f"{model_name}@{provider_name}")
     return llm
 
-@st.experimental_fragment()
 def clear_fragment():
     st.button("Clear Chat History",on_click=reset)
 
@@ -45,18 +42,8 @@ with st.sidebar:
 uploaded_file = st.sidebar.file_uploader("Upload a CSV file", accept_multiple_files=False,on_change=reset)
 
 if uploaded_file is not None:
-    @st.cache_resource
-    def agent_load(csv_file,_llm):
-        df = pd.read_csv(csv_file)
-        print(df.shape)
-        agent = create_pandas_dataframe_agent(
-                    _llm,
-                    df,
-                    verbose=True,
-                    agent_type=AgentType.OPENAI_FUNCTIONS,
-                )
-        return agent
-    agent = agent_load(uploaded_file,llm)
+    with open("data/dataframe.csv","wb") as f:
+        f.write(uploaded_file.getbuffer())
 
 with st.sidebar:
     clear_fragment()
@@ -91,7 +78,49 @@ if prompt := st.chat_input():
             st.markdown(prompt)
         # Display assistant response in chat message container
         with st.chat_message("assistant"):
-            response = agent.invoke(prompt)
-            response = st.write(response)
+            react_prompt = f"""
+            You are a expert in Python and Pandas library for data analysis. 
+            
+            You have access to the following tool:
+            Python REPL : useful for executing python code.
+            Response To Human: When you need to respond to the human you are talking to.
+
+            
+            You will receive a message from the human, then you should start a loop and do one of two things
+            
+            Option 1: You use a tool to answer the question.
+            For this, you should use the following format:
+            Thought: you should always think about what to do
+            Action: the action to take, should be [Python REPL]
+            Action Input: the input to the action, to be sent to the tool this should be enclosed in python's print function always
+            
+            After this, the human will respond with an observation, and you will continue.
+            
+            Option 2: You respond to the human.
+            For this, you should use the following format:
+            Action: Response To Human
+            Action Input: your response to the human, summarizing what you did and what you learned
+            
+            Example:
+            Human Input: Give details about first five rows of dataframe
+            Thought: for this we need to execute this code print(df.head())
+            Action: Python REPL tool needs to be used
+            Action Input: print(df.head())
+
+            Begin!
+            Human Input: {prompt}
+            """
+            python_repl = PythonREPL()
+            output = llm.invoke(react_prompt).content
+            pattern = r"Action Input: (.+)"
+            match = re.search(pattern, output)
+            if match:
+                action_input = match.group(1)
+                print("Action Input:", action_input)
+            else:
+                print("No match found.")
+            text = f"""import pandas as pd\ndf=pd.read_csv('data/dataframe.csv')\n{action_input}"""
+            response_df = python_repl.run(text)
+            response = st.write(response_df)
             # response = st.write(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
