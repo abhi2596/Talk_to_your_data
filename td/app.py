@@ -1,8 +1,8 @@
-from langchain_unify import ChatUnify
 import streamlit as st
 import unify 
 import re 
 from langchain_experimental.utilities import PythonREPL 
+from td.langchain_unify import ChatUnify
 
 def reset():
     st.session_state.messages = []
@@ -42,8 +42,11 @@ with st.sidebar:
 uploaded_file = st.sidebar.file_uploader("Upload a CSV file", accept_multiple_files=False,on_change=reset)
 
 if uploaded_file is not None:
-    with open("data/dataframe.csv","wb") as f:
-        f.write(uploaded_file.getbuffer())
+    @st.cache_data
+    def save_file(uploaded_file):
+        with open("data/dataframe.csv","wb") as f:
+            f.write(uploaded_file.getbuffer())
+    save_file(uploaded_file)
 
 with st.sidebar:
     clear_fragment()
@@ -112,15 +115,16 @@ if prompt := st.chat_input():
             """
             python_repl = PythonREPL()
             output = llm.invoke(react_prompt).content
-            pattern = r"Action Input: (.+)"
+            pattern = r"Action Input: (print.+)"
             match = re.search(pattern, output)
             if match:
                 action_input = match.group(1)
                 print("Action Input:", action_input)
             else:
                 print("No match found.")
-            text = f"""import pandas as pd\ndf=pd.read_csv('data/dataframe.csv')\n{action_input}"""
+            text = f"""import pandas as pd\ndf=pd.read_csv('data/dataframe.csv')\n{action_input.strip()}"""
             response_df = python_repl.run(text)
+            print(type(response_df))
             response = st.write(response_df)
             # response = st.write(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": response_df})
